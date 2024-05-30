@@ -91,6 +91,9 @@ void MobileManipulatorDummyVisualization::launchVisualizerNode(ros::NodeHandle& 
   robotStatePublisherPtr_.reset(new robot_state_publisher::RobotStatePublisher(tree));
   robotStatePublisherPtr_->publishFixedTransforms(true);
 
+  //可视化障碍球体
+  obstacle_ballPublisher_=nodeHandle.advertise<visualization_msgs::MarkerArray>("/mobile_manipulator/obstacle_ball", 1);
+  
   stateOptimizedPublisher_ = nodeHandle.advertise<visualization_msgs::MarkerArray>("/mobile_manipulator/optimizedStateTrajectory", 1);
   stateOptimizedPosePublisher_ = nodeHandle.advertise<geometry_msgs::PoseArray>("/mobile_manipulator/optimizedPoseTrajectory", 1);
   // Get ROS parameter
@@ -124,10 +127,17 @@ void MobileManipulatorDummyVisualization::launchVisualizerNode(ros::NodeHandle& 
 void MobileManipulatorDummyVisualization::update(const SystemObservation& observation, const PrimalSolution& policy,
                                                  const CommandData& command) {
   const ros::Time timeStamp = ros::Time::now();
-
-  publishObservation(timeStamp, observation);
+  std::vector<geometry_msgs::Point> obs_ponits;
+  publishObservation(timeStamp, observation);//当前状态给 rviz 给 mpc
   publishTargetTrajectories(timeStamp, command.mpcTargetTrajectories_);
   publishOptimizedTrajectory(timeStamp, policy);
+  //obstacles
+  // for(int i=0;i<2;i++){
+  //   geometry_msgs::Point p;
+  //   p.x=0.2;p.y=i*0.15;p.z=1;
+  //   obs_ponits.push_back(p);
+  // }
+  // publishObstaclePose(timeStamp,obs_ponits);
   if (geometryVisualization_ != nullptr) {
     geometryVisualization_->publishDistances(observation.state);
   }
@@ -210,7 +220,7 @@ void MobileManipulatorDummyVisualization::publishOptimizedTrajectory(const ros::
     endEffectorTrajectory.push_back(ros_msg_helpers::getPointMsg(eePosition));
   });
 
-  markerArray.markers.emplace_back(ros_msg_helpers::getLineMsg(std::move(endEffectorTrajectory), blue, TRAJECTORYLINEWIDTH));
+  markerArray.markers.emplace_back(ros_msg_helpers::getLineMsg(std::move(endEffectorTrajectory), blue, TRAJECTORYLINEWIDTH));//存放的是整条轨迹线type 为line
   markerArray.markers.back().ns = "EE Trajectory";
 
   // Extract base pose from state
@@ -224,7 +234,7 @@ void MobileManipulatorDummyVisualization::publishOptimizedTrajectory(const ros::
     pose.position = ros_msg_helpers::getPointMsg(r_world_base);
     pose.orientation = ros_msg_helpers::getOrientationMsg(q_world_base);
     baseTrajectory.push_back(pose.position);
-    poseArray.poses.push_back(std::move(pose));
+    poseArray.poses.push_back(std::move(pose));//每一个轨迹点存放到poseArray
   });
 
   markerArray.markers.emplace_back(ros_msg_helpers::getLineMsg(std::move(baseTrajectory), red, TRAJECTORYLINEWIDTH));
@@ -236,6 +246,36 @@ void MobileManipulatorDummyVisualization::publishOptimizedTrajectory(const ros::
 
   stateOptimizedPublisher_.publish(markerArray);
   stateOptimizedPosePublisher_.publish(poseArray);
+}
+
+void MobileManipulatorDummyVisualization::publishObstaclePose(const ros::Time& timeStamp,const std::vector<geometry_msgs::Point> obstacelsPose){
+  visualization_msgs::MarkerArray obs_points_,obs_pointlists;
+  int id=0;
+
+  for(auto obs:obstacelsPose){
+    std::cout<<"visualized obstacles"<<std::endl;
+    visualization_msgs::Marker obs_points;
+    obs_points.header.frame_id = "world";
+    obs_points.header.stamp=timeStamp;
+    obs_points.id=id;
+    id++;
+    obs_points.action=visualization_msgs::Marker::ADD;
+    obs_points.type=visualization_msgs::Marker::SPHERE;
+    obs_points.scale.x=0.4;
+    obs_points.scale.y=0.4;
+    obs_points.scale.z=0.4;
+    //set color
+    obs_points.color.a=0.8;
+    obs_points.color.r=0.1;
+    obs_points.color.g=0.4;
+    //its pose and orientation
+    obs_points.pose.orientation=ros_msg_helpers::getOrientationMsg({0., 0., 0., 1.});
+    obs_points.pose.position=obs;
+    obs_points_.markers.push_back(obs_points);
+  }
+
+  obstacle_ballPublisher_.publish(obs_points_);
+  obs_points_.markers.clear();
 }
 
 }  // namespace mobile_manipulator

@@ -132,6 +132,6 @@ auto EndEffectorConstraint::interpolateEndEffectorPose(scalar_t time) const -> s
 
   return {position, orientation};
 }
-
+ 
 }  // namespace mobile_manipulator
 }  // namespace ocs2

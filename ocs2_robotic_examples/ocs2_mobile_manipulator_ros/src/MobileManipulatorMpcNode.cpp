@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
   // Robot interface
   MobileManipulatorInterface interface(taskFile, libFolder, urdfFile);
 
-  // ROS ReferenceManager
+  // ROS ReferenceManager 
   auto rosReferenceManagerPtr = std::make_shared<ocs2::RosReferenceManager>(robotName, interface.getReferenceManagerPtr());
   rosReferenceManagerPtr->subscribe(nodeHandle);
 

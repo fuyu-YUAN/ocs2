@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(ocs2_mobile_manipulator_ros)
-
+set(ROS_BUILD_TYPE Debug)#使用gdb 调试
 # Generate compile_commands.json for clang tools
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -77,7 +77,17 @@ include_directories(
 link_directories(
   ${pinocchio_LIBRARY_DIRS}
 )
-
+#MPC SQP node
+add_executable(mobile_manipulator_sqp_mpc_node
+  src/MobileManipulatorSqpMpcNode.cpp
+  )
+add_dependencies(mobile_manipulator_sqp_mpc_node
+  ${catkin_EXPORTED_TARGETS}
+)
+target_link_libraries(mobile_manipulator_sqp_mpc_node
+  ${catkin_LIBRARIES}
+)
+target_compile_options(mobile_manipulator_sqp_mpc_node PUBLIC ${FLAGS})
 # MPC node
 add_executable(mobile_manipulator_mpc_node
   src/MobileManipulatorMpcNode.cpp
@@ -114,7 +124,18 @@ target_link_libraries(mobile_manipulator_dummy_mrt_node
   ${catkin_LIBRARIES}
 )
 target_compile_options(mobile_manipulator_dummy_mrt_node PUBLIC ${FLAGS})
-
+#MobileManipulatorRealVisualization real z1 node
+add_executable(z1_real_visualization_node
+  src/MobileManipulatorRealVisualization.cpp
+  src/MobileManipulatorDummyVisualization.cpp
+)
+add_dependencies(z1_real_visualization_node
+  ${catkin_EXPORTED_TARGETS}
+)
+target_link_libraries(z1_real_visualization_node
+  ${catkin_LIBRARIES}
+)
+target_compile_options(z1_real_visualization_node PUBLIC ${FLAGS})
 # Target node
 add_executable(mobile_manipulator_target
   src/MobileManipulatorTarget.cpp
@@ -135,7 +156,7 @@ find_package(cmake_clang_tools QUIET)
 if (cmake_clang_tools_FOUND)
   message(STATUS "Run clang tooling")
   add_clang_tooling(
-    TARGETS mobile_manipulator_mpc_node mobile_manipulator_dummy_mrt_node
+    TARGETS mobile_manipulator_mpc_node mobile_manipulator_sqp_mpc_node mobile_manipulator_dummy_mrt_node
     SOURCE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/include
     CT_HEADER_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include
     CF_WERROR
@@ -151,7 +172,8 @@ install(DIRECTORY include/${PROJECT_NAME}/
 )
 install(
   TARGETS 
-    mobile_manipulator_mpc_node 
+    mobile_manipulator_mpc_node
+    mobile_manipulator_sqp_mpc_node 
     mobile_manipulator_distance_visualization
     mobile_manipulator_dummy_mrt_node 
     mobile_manipulator_target

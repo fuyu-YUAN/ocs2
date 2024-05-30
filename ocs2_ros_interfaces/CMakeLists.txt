@@ -15,6 +15,7 @@ set(CATKIN_PACKAGE_DEPENDENCIES
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
   cmake_modules
+
   ${CATKIN_PACKAGE_DEPENDENCIES}
 )
 

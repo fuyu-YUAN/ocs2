@@ -10,7 +10,9 @@
       <arg name="taskFile"    value="$(find ocs2_mobile_manipulator)/config/franka/task.info" />
       <!-- The library folder to generate CppAD codegen into -->
       <arg name="libFolder"   value="$(find ocs2_mobile_manipulator)/auto_generated/franka" />
-      
+      <include file="$(find ocs2_ros_interfaces)/launch/performance_indices.launch">
+            <arg name="mpc_policy_topic_name"      value="mobile_manipulator_mpc_policy"/>
+          </include>
       <include file="$(find ocs2_mobile_manipulator_ros)/launch/include/mobile_manipulator.launch">
             <arg name="rviz"        value="$(arg rviz)" />
             <arg name="debug"       value="$(arg debug)" />

@@ -5,9 +5,12 @@ project(ocs2_mobile_manipulator)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CATKIN_PACKAGE_DEPENDENCIES
+  roscpp
+  std_msgs
   ocs2_core
   ocs2_ddp
   ocs2_mpc
+  ocs2_sqp
   ocs2_robotic_tools
   ocs2_robotic_assets
   ocs2_pinocchio_interface
@@ -87,6 +90,7 @@ add_library(${PROJECT_NAME}
   src/dynamics/FloatingArmManipulatorDynamics.cpp
   src/dynamics/FullyActuatedFloatingArmManipulatorDynamics.cpp
   src/MobileManipulatorInterface.cpp
+  src/constraint/EndEffectorObsConstraint.cpp
 )
 add_dependencies(${PROJECT_NAME}
   ${catkin_EXPORTED_TARGETS}
@@ -152,3 +156,12 @@ endmacro()
 add_ocs2_test(SelfCollisionTest test/testSelfCollision.cpp)
 add_ocs2_test(EndEffectorConstraintTest test/testEndEffectorConstraint.cpp)
 add_ocs2_test(DummyMobileManipulatorTest test/testDummyMobileManipulator.cpp)
+
+
+# add_executable( 
+#   EndEffectorObsConstraint src/constraint/EndEffectorObsConstraint.cpp
+# )
+
+# target_link_libraries(EndEffectorObsConstraint
+#   ${catkin_LIBRARIES}
+# )

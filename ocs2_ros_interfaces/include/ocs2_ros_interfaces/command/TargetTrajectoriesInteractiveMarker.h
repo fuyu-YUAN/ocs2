@@ -38,6 +38,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <ocs2_mpc/SystemObservation.h>
 #include <ocs2_ros_interfaces/command/TargetTrajectoriesRosPublisher.h>
+#include "geometry_msgs/Point.h"  
+#include <visualization_msgs/MarkerArray.h>
+#include <ocs2_ros_interfaces/common/RosMsgHelpers.h>
 
 namespace ocs2 {
 
@@ -67,14 +70,31 @@ class TargetTrajectoriesInteractiveMarker final {
 
  private:
   visualization_msgs::InteractiveMarker createInteractiveMarker() const;
-  void processFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
+  visualization_msgs::InteractiveMarker BarrierMarker() const;
+  visualization_msgs::InteractiveMarker Barrier_2_Marker() const;
 
-  interactive_markers::MenuHandler menuHandler_;
-  interactive_markers::InteractiveMarkerServer server_;
+  void processFeedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
+  void process1Feedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
+   void process2Feedback(const visualization_msgs::InteractiveMarkerFeedbackConstPtr& feedback);
+ 
+ void publishObstaclePose(const ros::Time& timeStamp,const std::vector<geometry_msgs::Point> obstacelsPose);
+
+
+  geometry_msgs::Point barriermsg;  
+  ros::NodeHandle barrierHD;  
+
+
+  interactive_markers::MenuHandler menuHandler_ ;
+    interactive_markers::MenuHandler  BarrierHandler_,Barrier_2_Handler_;
+
+  interactive_markers::InteractiveMarkerServer server_ ;
 
   GaolPoseToTargetTrajectories gaolPoseToTargetTrajectories_;
 
   std::unique_ptr<TargetTrajectoriesRosPublisher> targetTrajectoriesPublisherPtr_;
+    ros::Publisher obstacle_pub = barrierHD.advertise<geometry_msgs::Point>("obstacle_position", 1000);  
+    ros::Publisher obstacle_ballPublisher_;
+  visualization_msgs::MarkerArray obs_points_,obs_pointlists;
 
   ::ros::Subscriber observationSubscriber_;
   mutable std::mutex latestObservationMutex_;

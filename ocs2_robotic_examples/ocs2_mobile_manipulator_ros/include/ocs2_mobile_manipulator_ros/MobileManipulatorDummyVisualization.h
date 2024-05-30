@@ -58,7 +58,9 @@ class MobileManipulatorDummyVisualization final : public DummyObserver {
   void publishObservation(const ros::Time& timeStamp, const SystemObservation& observation);
   void publishTargetTrajectories(const ros::Time& timeStamp, const TargetTrajectories& targetTrajectories);
   void publishOptimizedTrajectory(const ros::Time& timeStamp, const PrimalSolution& policy);
-
+  
+  void publishObstaclePose(const ros::Time& timeStamp,const std::vector<geometry_msgs::Point> obstacelsPose);
+  
   PinocchioInterface pinocchioInterface_;
   const ManipulatorModelInfo modelInfo_;
   std::vector<std::string> removeJointNames_;
@@ -66,6 +68,7 @@ class MobileManipulatorDummyVisualization final : public DummyObserver {
   std::unique_ptr<robot_state_publisher::RobotStatePublisher> robotStatePublisherPtr_;
   tf::TransformBroadcaster tfBroadcaster_;
 
+  ros::Publisher obstacle_ballPublisher_;
   ros::Publisher stateOptimizedPublisher_;
   ros::Publisher stateOptimizedPosePublisher_;
 

@@ -40,7 +40,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <ocs2_mobile_manipulator/FactoryFunctions.h>
 #include <ocs2_pinocchio_interface/PinocchioInterface.h>
-
+#include <ocs2_sqp/SqpSettings.h>
+#include <ros/package.h>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include "geometry_msgs/Point.h"
+#include <ros/subscriber.h>
+#include "ros/ros.h"
 namespace ocs2 {
 namespace mobile_manipulator {
 
@@ -67,6 +74,8 @@ class MobileManipulatorInterface final : public RobotInterface {
 
   mpc::Settings& mpcSettings() { return mpcSettings_; }
 
+  sqp::Settings& sqpSettings() { return sqpSettings_; }
+
   const OptimalControlProblem& getOptimalControlProblem() const override { return problem_; }
 
   std::shared_ptr<ReferenceManagerInterface> getReferenceManagerPtr() const override { return referenceManagerPtr_; }
@@ -87,10 +96,14 @@ class MobileManipulatorInterface final : public RobotInterface {
   std::unique_ptr<StateCost> getSelfCollisionConstraint(const PinocchioInterface& pinocchioInterface, const std::string& taskFile,
                                                         const std::string& urdfFile, const std::string& prefix, bool useCaching,
                                                         const std::string& libraryFolder, bool recompileLibraries);
+  std::unique_ptr<StateCost> getEndEffetor_obsConstraint(const PinocchioInterface& pinocchioInterface, const std::string& taskFile,
+                                                        const std::string& prefix, bool useCaching,
+                                                        const std::string& libraryFolder, bool recompileLibraries);                                                      
   std::unique_ptr<StateInputCost> getJointLimitSoftConstraint(const PinocchioInterface& pinocchioInterface, const std::string& taskFile);
 
   ddp::Settings ddpSettings_;
   mpc::Settings mpcSettings_;
+  sqp::Settings sqpSettings_;
 
   OptimalControlProblem problem_;
   std::shared_ptr<ReferenceManager> referenceManagerPtr_;
@@ -100,6 +113,7 @@ class MobileManipulatorInterface final : public RobotInterface {
 
   std::unique_ptr<PinocchioInterface> pinocchioInterfacePtr_;
   ManipulatorModelInfo manipulatorModelInfo_;
+    // ros::NodeHandle obs_hd;  
 
   vector_t initialState_;
 };

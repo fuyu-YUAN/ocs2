@@ -52,6 +52,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ocs2_mobile_manipulator/ManipulatorModelInfo.h"
 #include "ocs2_mobile_manipulator/MobileManipulatorPreComputation.h"
 #include "ocs2_mobile_manipulator/constraint/EndEffectorConstraint.h"
+#include "ocs2_mobile_manipulator/constraint/EndEffectorObtConstraint.h"
 #include "ocs2_mobile_manipulator/constraint/MobileManipulatorSelfCollisionConstraint.h"
 #include "ocs2_mobile_manipulator/cost/QuadraticInputCost.h"
 #include "ocs2_mobile_manipulator/dynamics/DefaultManipulatorDynamics.h"
@@ -65,6 +66,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 namespace ocs2 {
 namespace mobile_manipulator {
+using vector3_t = Eigen::Matrix<scalar_t, 3, 1>;
 
 /******************************************************************************************************/
 /******************************************************************************************************/
@@ -72,6 +74,8 @@ namespace mobile_manipulator {
 MobileManipulatorInterface::MobileManipulatorInterface(const std::string& taskFile, const std::string& libraryFolder,
                                                        const std::string& urdfFile) {
   // check that task file exists
+
+
   boost::filesystem::path taskFilePath(taskFile);
   if (boost::filesystem::exists(taskFilePath)) {
     std::cerr << "[MobileManipulatorInterface] Loading task file: " << taskFilePath << std::endl;
@@ -118,7 +122,7 @@ MobileManipulatorInterface::MobileManipulatorInterface(const std::string& taskFi
   // create pinocchio interface
   pinocchioInterfacePtr_.reset(new PinocchioInterface(createPinocchioInterface(urdfFile, modelType, removeJointNames)));
   std::cerr << *pinocchioInterfacePtr_;
-
+  std::cerr << "// create pinocchio interface";
   // ManipulatorModelInfo
   manipulatorModelInfo_ = mobile_manipulator::createManipulatorModelInfo(*pinocchioInterfacePtr_, modelType, baseFrame, eeFrame);
 
@@ -148,7 +152,8 @@ MobileManipulatorInterface::MobileManipulatorInterface(const std::string& taskFi
   initialState_.tail(armStateDim) = initialArmState;
 
   std::cerr << "Initial State:   " << initialState_.transpose() << std::endl;
-
+  //sqp settings
+  sqpSettings_ = sqp::loadSettings(taskFile, "sqp");
   // DDP-MPC settings
   ddpSettings_ = ddp::loadSettings(taskFile, "ddp");
   mpcSettings_ = mpc::loadSettings(taskFile, "mpc");
@@ -162,14 +167,16 @@ MobileManipulatorInterface::MobileManipulatorInterface(const std::string& taskFi
   // Cost
   problem_.costPtr->add("inputCost", getQuadraticInputCost(taskFile));
 
-  // Constraints
-  // joint limits constraint
+  // Constraints 这些都是软约束 用的是cost 而不是violation 约束的满足情况在cost项中查看 不在Equlity constraints 和 Inrquality constraints 中
+  // joint limits constraint //采用的state - input软约束 
   problem_.softConstraintPtr->add("jointLimits", getJointLimitSoftConstraint(*pinocchioInterfacePtr_, taskFile));
-  // end-effector state constraint
+  // end-effector state constraint // 这个约束保证了末端的位值运动到指定位值
   problem_.stateSoftConstraintPtr->add("endEffector", getEndEffectorConstraint(*pinocchioInterfacePtr_, taskFile, "endEffector",
                                                                                usePreComputation, libraryFolder, recompileLibraries));
+  problem_.stateSoftConstraintPtr->add("endEffector_obs",getEndEffetor_obsConstraint(*pinocchioInterfacePtr_, taskFile, "endEffector_obs",usePreComputation,libraryFolder,recompileLibraries));
   problem_.finalSoftConstraintPtr->add("finalEndEffector", getEndEffectorConstraint(*pinocchioInterfacePtr_, taskFile, "finalEndEffector",
                                                                                     usePreComputation, libraryFolder, recompileLibraries));
+  //现在需要添加一个路径避障的约束
   // self-collision avoidance constraint
   bool activateSelfCollision = true;
   loadData::loadPtreeValue(pt, activateSelfCollision, "selfCollision.activate", true);
@@ -275,7 +282,7 @@ std::unique_ptr<StateCost> MobileManipulatorInterface::getEndEffectorConstraint(
   if (usePreComputation) {
     MobileManipulatorPinocchioMapping pinocchioMapping(manipulatorModelInfo_);
     PinocchioEndEffectorKinematics eeKinematics(pinocchioInterface, pinocchioMapping, {manipulatorModelInfo_.eeFrame});
-    constraint.reset(new EndEffectorConstraint(eeKinematics, *referenceManagerPtr_));
+    constraint.reset(new EndEffectorConstraint(eeKinematics, *referenceManagerPtr_));//末端要运动到目标位值的约束
   } else {
     MobileManipulatorPinocchioMappingCppAd pinocchioMappingCppAd(manipulatorModelInfo_);
     PinocchioEndEffectorKinematicsCppAd eeKinematics(pinocchioInterface, pinocchioMappingCppAd, {manipulatorModelInfo_.eeFrame},
@@ -291,6 +298,51 @@ std::unique_ptr<StateCost> MobileManipulatorInterface::getEndEffectorConstraint(
   return std::make_unique<StateSoftConstraint>(std::move(constraint), std::move(penaltyArray));
 }
 
+
+std::unique_ptr<StateCost> MobileManipulatorInterface::getEndEffetor_obsConstraint(const PinocchioInterface& pinocchioInterface, 
+                                                        const std::string& taskFile,const std::string& prefix, bool usePreComputation,
+                                                        const std::string& libraryFolder, bool recompileLibraries){
+// ::ros::NodeHandle& nodeHandle;
+  scalar_t mu = 1e-2;
+  scalar_t delta = 1e-3;
+  
+  boost::property_tree::ptree pt;
+  boost::property_tree::read_info(taskFile, pt);
+  std::cerr << "\n #### endeffector obstacle avoidence Settings: ";
+  std::cerr << "\n #### =============================================================================\n";  
+
+  loadData::loadPtreeValue(pt, mu, prefix + ".mu", true);
+  loadData::loadPtreeValue(pt, delta, prefix + ".delta", true);
+  //set obstacles
+
+  std::vector<std::tuple<scalar_t,vector3_t>> obs_es;
+  scalar_t d_safe=0.05;
+  vector3_t obstacle_pos(3.3,3.3,3.3);//位置
+std::cout<<obstacle_pos<<std::endl;
+  // vector3_t obstacle_pos(0.2,0.0,0.6);//位置
+  vector3_t obstacle_pos_1(0.2,0.15,0.6);//
+  std::tuple<scalar_t,vector3_t> obstacles1{0.225,obstacle_pos};//半径
+  std::tuple<scalar_t,vector3_t> obstacles2{0.13,obstacle_pos_1};
+  obs_es.push_back(obstacles1);
+  obs_es.push_back(obstacles2);            
+                                                                             
+  //loadData::loadStdVectorOfTuple(taskFile, prefix + ".obstacles", obs_es, true);
+  if (referenceManagerPtr_ == nullptr) {
+    throw std::runtime_error("[getEndEffectorConstraint] referenceManagerPtr_ should be set first!");
+  }
+  std::unique_ptr<StateConstraint> constraint;
+  if(usePreComputation){
+    MobileManipulatorPinocchioMapping pinocchioMapping(manipulatorModelInfo_);
+    PinocchioEndEffectorKinematics eeKinematics(pinocchioInterface, pinocchioMapping, {manipulatorModelInfo_.eeFrame});
+    constraint.reset(new EndEffectorObtConstraint(obs_es,eeKinematics,*referenceManagerPtr_,d_safe));
+  }else{
+    std::cerr <<"plese use precomputation";
+    exit(0);
+  }
+  auto penalty = std::make_unique<RelaxedBarrierPenalty>(RelaxedBarrierPenalty::Config{mu, delta});
+  return std::make_unique<StateSoftConstraint>(std::move(constraint), std::move(penalty));
+
+}
 /******************************************************************************************************/
 /******************************************************************************************************/
 /******************************************************************************************************/
@@ -330,7 +382,6 @@ std::unique_ptr<StateCost> MobileManipulatorInterface::getSelfCollisionConstrain
         pinocchioInterface, MobileManipulatorPinocchioMapping(manipulatorModelInfo_), std::move(geometryInterface), minimumDistance,
         "self_collision", libraryFolder, recompileLibraries, false);
   }
-
   auto penalty = std::make_unique<RelaxedBarrierPenalty>(RelaxedBarrierPenalty::Config{mu, delta});
 
   return std::make_unique<StateSoftConstraint>(std::move(constraint), std::move(penalty));
@@ -431,7 +482,7 @@ std::unique_ptr<StateInputCost> MobileManipulatorInterface::getJointLimitSoftCon
     }
   }
 
-  auto boxConstraints = std::make_unique<StateInputSoftBoxConstraint>(stateLimits, inputLimits);
+  auto boxConstraints = std::make_unique<StateInputSoftBoxConstraint>(stateLimits, inputLimits);// 先是state 再是input 和优化问题的size 相匹配
   boxConstraints->initializeOffset(0.0, vector_t::Zero(manipulatorModelInfo_.stateDim), vector_t::Zero(manipulatorModelInfo_.inputDim));
   return boxConstraints;
 }
